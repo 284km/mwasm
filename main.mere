@@ -1,0 +1,30 @@
+// mwasm — a WASM binary inspector written in Mere.
+// M0: check the magic ("\0asm") and print the version.
+// Meta: Mere reading the binaries its own compiler emits (mere -w).
+
+let path =
+  match args () with
+  | Cons (p, _) -> p
+  | Nil -> ""
+in
+let b = read_file path in
+let n = file_size path in
+if n < 8 then
+  let _ = print_err "mwasm: file too small to be wasm" in
+  exit 1
+else
+  let magic_ok =
+    ord (char_at b 0) == 0 && str_eq (char_at b 1) "a"
+    && str_eq (char_at b 2) "s" && str_eq (char_at b 3) "m"
+  in
+  if not magic_ok then
+    let _ = print_err "mwasm: not a wasm file (bad magic)" in
+    exit 1
+  else
+    let version =
+      ord (char_at b 4) + ord (char_at b 5) * 256
+      + ord (char_at b 6) * 65536 + ord (char_at b 7) * 16777216
+    in
+    let _ = print ("wasm module: " ++ path) in
+    let _ = print ("  size: " ++ show n ++ " bytes") in
+    print ("  version: " ++ show version)
