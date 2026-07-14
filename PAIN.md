@@ -9,7 +9,7 @@ Status legend: 🔴 open · 🟡 worked around · 🟢 fixed upstream
 
 ---
 
-## P1 🔴 No way to learn a binary file's length natively
+## P1 🟢 No way to learn a binary file's length natively (fixed upstream, mere v0.1.21)
 
 Measured first (the surprise): `read_file` on a .wasm is **binary-safe in
 the interpreter** (`str_len` = true size, `char_at`/`ord` correct past
@@ -27,3 +27,26 @@ let n = file_size path in ...   // type error: unbound variable: file_size
 next to the existing `file_mtime`). With (buffer, size) carried explicitly,
 the existing NUL-safe `char_at`/`ord` make binary parsing expressible —
 no full bytes type needed yet.
+
+**Fixed upstream (mere v0.1.21):** added `file_size : str -> int` (stat's
+`st_size`, next to `file_mtime`), interp + C. Carrying `(buffer, size)`
+explicitly, the NUL-safe `char_at` / `ord` / `substring` make the whole
+inspector expressible.
+
+## (M1/M2) 🟢 positive: binary parsing needed no more language changes
+
+After `file_size`, section walking (LEB128 sizes) and export dumping
+(length-prefixed names + kind/index) hit **no further friction**:
+
+- **LEB128 without bit ops**: `b % 128` (low 7 bits) + `b >= 128`
+  (continuation) decodes unsigned LEB128 with plain arithmetic — Mere has
+  no bitwise operators, and none were needed.
+- **NUL-safe throughout**: `char_at` / `ord` / `substring` and building a
+  name char-by-char (`acc ++ char_at b i`) all work past embedded NULs, on
+  interp and native identically. Verified against `wasm-objdump -h/-x`:
+  same 10 sections and same 4 exports (name, kind, index).
+
+A dedicated `bytes` type stays deferred — the honest edge is bitwise ops
+(would be nicer than `%`/`/` for flags) and the fact that `str` is
+implicitly a byte buffer here rather than validated UTF-8. Neither blocked
+this tool.

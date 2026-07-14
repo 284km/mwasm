@@ -1,6 +1,72 @@
-// mwasm — a WASM binary inspector written in Mere.
-// M0: check the magic ("\0asm") and print the version.
+// mwasm — a WASM binary inspector written in Mere, compiled native.
+//   mwasm file.wasm   → magic/version check + section listing
 // Meta: Mere reading the binaries its own compiler emits (mere -w).
+// Binary discipline: read_file gives the buffer (NUL-safe char_at/ord),
+// file_size gives the true byte length; (buffer, size) travel together.
+
+let sec_name = fn (id: int) ->
+  if id == 0 then "custom"
+  else if id == 1 then "type"
+  else if id == 2 then "import"
+  else if id == 3 then "function"
+  else if id == 4 then "table"
+  else if id == 5 then "memory"
+  else if id == 6 then "global"
+  else if id == 7 then "export"
+  else if id == 8 then "start"
+  else if id == 9 then "element"
+  else if id == 10 then "code"
+  else if id == 11 then "data"
+  else if id == 12 then "datacount"
+  else "unknown";
+
+// LEB128 (unsigned) via plain arithmetic: low 7 bits = b % 128,
+// continuation = b >= 128. Returns (value, next_offset).
+let rec uleb = fn (b: str) -> fn (i: int) -> fn (mult: int) -> fn (acc: int) ->
+  let byte = ord (char_at b i) in
+  let acc2 = acc + (byte % 128) * mult in
+  if byte >= 128 then uleb b (i + 1) (mult * 128) acc2
+  else (acc2, i + 1);
+
+// read a length-prefixed name (uleb len, then that many bytes) as a str,
+// rebuilt char-by-char so it is independent of NUL bytes. Returns (name, next).
+let rec take_str = fn (b: str) -> fn (i: int) -> fn (k: int) -> fn (acc: str) ->
+  if k == 0 then (acc, i)
+  else take_str b (i + 1) (k - 1) (acc ++ char_at b i);
+let read_name = fn (b: str) -> fn (i: int) ->
+  let (len, j) = uleb b i 1 0 in
+  take_str b j len "";
+
+let kind_name = fn (k: int) ->
+  if k == 0 then "func" else if k == 1 then "table"
+  else if k == 2 then "memory" else if k == 3 then "global" else "?";
+
+// export section body: uleb count, then count * (name, kind byte, index uleb)
+let rec dump_exports = fn (b: str) -> fn (i: int) -> fn (left: int) ->
+  if left == 0 then ()
+  else
+    let (nm, j) = read_name b i in
+    let kind = ord (char_at b j) in
+    let (idx, k) = uleb b (j + 1) 1 0 in
+    let _ = print ("      " ++ kind_name kind ++ " " ++ nm
+                   ++ " -> " ++ show idx) in
+    dump_exports b k (left - 1);
+
+let rec walk = fn (b: str) -> fn (i: int) -> fn (n: int) ->
+  if i >= n then ()
+  else
+    let id = ord (char_at b i) in
+    let (size, j) = uleb b (i + 1) 1 0 in
+    let _ = print ("  section " ++ show id ++ " (" ++ sec_name id ++ "): "
+                   ++ show size ++ " bytes") in
+    let _ =
+      if id == 7 then
+        let (count, c) = uleb b j 1 0 in
+        let _ = print ("    exports (" ++ show count ++ "):") in
+        dump_exports b c count
+      else ()
+    in
+    walk b (j + size) n;
 
 let path =
   match args () with
@@ -25,6 +91,6 @@ else
       ord (char_at b 4) + ord (char_at b 5) * 256
       + ord (char_at b 6) * 65536 + ord (char_at b 7) * 16777216
     in
-    let _ = print ("wasm module: " ++ path) in
-    let _ = print ("  size: " ++ show n ++ " bytes") in
-    print ("  version: " ++ show version)
+    let _ = print ("wasm module: " ++ path
+                   ++ " (" ++ show n ++ " bytes, version " ++ show version ++ ")") in
+    walk b 8 n
