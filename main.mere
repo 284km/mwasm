@@ -18,6 +18,12 @@ let sec_name = fn (id: int) ->
   else if id == 10 then "code"
   else if id == 11 then "data"
   else if id == 12 then "datacount"
+  // 13 arrived with exception handling and was standardised in Wasm 3.0. This
+  // table stopped at 12 and answered "unknown" for it, and nothing noticed:
+  // Mere's backend emits no tags, so no module this reader was pointed at ever
+  // asked. A name table does not fall behind loudly -- it falls behind by
+  // answering "unknown" to a question the spec has since answered.
+  else if id == 13 then "tag"
   else "unknown";
 
 // LEB128 (unsigned) via plain arithmetic: low 7 bits = b % 128,

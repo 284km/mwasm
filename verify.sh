@@ -100,6 +100,18 @@ cat > "$TMP/noexport.wat" <<'W'
 W
 wat2wasm "$TMP/noexport.wat" -o "$TMP/noexport.wasm" && check "$TMP/noexport.wasm"
 
+# Section 13, the tag section, which exception handling introduced and Wasm 3.0
+# standardised. Nothing else here reaches it: Mere's backend does not emit tags,
+# and none of the wat above declares one. A reader whose section table stops at
+# 12 calls this "unknown" and stays green forever, because no module in the
+# corpus ever asked it the question.
+cat > "$TMP/tag.wat" <<'W'
+(module
+  (tag $e (param i32))
+  (func (export "f") (try (do (throw $e (i32.const 1))) (catch $e (drop)))))
+W
+wat2wasm --enable-exceptions "$TMP/tag.wat" -o "$TMP/tag.wasm" && check "$TMP/tag.wasm"
+
 # --- and the two things a reader has to refuse ------------------------------
 # A file that is not a module at all. mwasm checks the magic, so it must say so
 # rather than reporting sections it invented from whatever bytes were there.
